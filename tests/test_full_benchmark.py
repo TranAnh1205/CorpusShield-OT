@@ -20,6 +20,7 @@ class FullBenchmarkTests(unittest.TestCase):
         self.assertTrue(all(case["target_id"] in ids and case["query"] != case["paraphrase"]
                             for case in self.cases))
         self.assertTrue(all(set(case["related_ids"]).issubset(ids) for case in self.cases))
+        self.assertEqual(sum(case["target_id"].startswith("attack:ics:") for case in self.cases), 1)
 
     def test_forgery_replay_and_compromise_have_distinct_outcomes(self):
         by_id = {record["record_id"]: record for record in self.records}
@@ -33,6 +34,12 @@ class FullBenchmarkTests(unittest.TestCase):
             for condition in ("signature_forged", "signature_replayed", "layered_compromised"):
                 self.assertEqual(len(corpora[condition]), len(self.records))
                 self.assertEqual(rejected[condition], len(poison))
+
+    def test_default_attack_cases_balance_enterprise_and_ics(self):
+        _, cases = load_inputs()
+        attack = [case for case in cases if case["source_type"] == "attack"]
+        self.assertEqual(sum(case["target_id"].startswith("attack:enterprise:") for case in attack), 10)
+        self.assertEqual(sum(case["target_id"].startswith("attack:ics:") for case in attack), 10)
 
     def test_small_run_reports_every_condition_and_query(self):
         result = run_full(("bm25",), 1)

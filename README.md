@@ -54,4 +54,6 @@ Tài liệu chi tiết: [benchmark đa nguồn](docs/FULL_BENCHMARK.md), [kiến
 
 > Tự xây dựng benchmark an ninh RAG trên 2.743 bản ghi KEV, ATT&CK và CSAF OT; 60 ca, 120 truy vấn, hai mức chèn tài liệu độc và ba retriever. Triển khai cổng HMAC và snapshot độc lập, đo phơi nhiễm corpus poisoning tại top-1/top-5 dưới tấn công chữ ký giả, phát lại và khóa ký bị lộ; công bố dữ liệu nguồn đã ghim và kết quả từng truy vấn.
 
-Chỉ dùng mô tả ba retriever khi đã chạy và lưu kết quả embedding trên môi trường của bạn. Dự án không được CISA hoặc MITRE tài trợ hay xác nhận.
+Kết quả của cả ba retriever đã được chạy và lưu trong `results/`; xem [bảng đánh giá](docs/FULL_BENCHMARK.md). Dự án không được CISA hoặc MITRE tài trợ hay xác nhận.
+
+Mã nguồn riêng của dự án hiện chưa có giấy phép phát hành; chọn giấy phép trước khi muốn người khác tái sử dụng mã. Giấy phép dữ liệu và model được ghi riêng trong [data/README.md](data/README.md).

@@ -65,8 +65,15 @@ def load_inputs(cases_per_source: int = CASES_PER_SOURCE) -> tuple[list[dict[str
         "paraphrase": f"How should operators respond to {entry['title']} ({entry['advisory_id']})?",
         "answer_target": "No remediation is required",
     } for entry in csaf_entries]
+    ics_count = cases_per_source // 2
+    enterprise_count = cases_per_source - ics_count
+    attack_cases = _chosen([entry for entry in attack_candidates
+                            if entry["target_id"].startswith("attack:enterprise:")], enterprise_count)
+    if ics_count:
+        attack_cases += _chosen([entry for entry in attack_candidates
+                                 if entry["target_id"].startswith("attack:ics:")], ics_count)
     cases = (_chosen(kev_candidates, cases_per_source)
-             + _chosen(attack_candidates, cases_per_source)
+             + attack_cases
              + _chosen(csaf_candidates, cases_per_source))
     records = kev_records + [entry["record"] for entry in mitre_entries + csaf_entries]
     record_ids = [item["record_id"] for item in records]
