@@ -1,0 +1,111 @@
+"""Pinned, locally rebuilt CISA OT advisory corpus.
+
+Only the manifest is versioned. Advisory content stays in data/raw because
+some entries republish third-party text with their own terms.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from .records import validate_record
+
+ROOT = Path(__file__).resolve().parent.parent
+MANIFEST = ROOT / "data" / "csaf-manifest.json"
+RAW = ROOT / "data" / "raw" / "csaf"
+
+
+def _manifest() -> dict[str, object]:
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    if manifest.get("source") != "cisagov/CSAF" or len(manifest.get("files", [])) != 300:
+        raise ValueError("invalid CSAF manifest")
+    for item in manifest["files"]:
+        path = item["path"]
+        if not re.fullmatch(r"csaf_files/OT/white/20(?:23|24|25|26)/[a-z0-9-]+\.json", path):
+            raise ValueError("invalid CSAF path in manifest")
+        if not re.fullmatch(r"[0-9a-f]{40}", item["git_blob_sha1"]):
+            raise ValueError("invalid Git blob digest in manifest")
+    return manifest
+
+
+def _checked_bytes(path: Path, blob_sha: str) -> bytes:
+    data = path.read_bytes()
+    actual = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
+    if actual != blob_sha:
+        raise ValueError(f"Git blob hash mismatch: {path}")
+    return data
+
+
+def fetch_csaf(workers: int = 12) -> list[Path]:
+    """Fetch the 300 selected files from one commit, verifying each Git blob."""
+    if workers < 1 or workers > 32:
+        raise ValueError("workers must be between 1 and 32")
+    manifest = _manifest()
+    commit = manifest["commit"]
+
+    def fetch_one(item: dict[str, str]) -> Path:
+        relative = item["path"]
+        path = RAW / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            url = f"https://raw.githubusercontent.com/cisagov/CSAF/{commit}/{relative}"
+            request = urllib.request.Request(url, headers={"User-Agent": "rag-sec-research"})
+            with urllib.request.urlopen(request, timeout=90) as response:
+                data = response.read()
+            temporary = path.with_suffix(".download")
+            temporary.write_bytes(data)
+            _checked_bytes(temporary, item["git_blob_sha1"])
+            temporary.replace(path)
+        _checked_bytes(path, item["git_blob_sha1"])
+        return path
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(fetch_one, manifest["files"]))
+
+
+def _compact(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def load_csaf() -> list[dict[str, object]]:
+    """Parse local advisories into searchable records and case metadata."""
+    manifest = _manifest()
+    entries = []
+    for item in manifest["files"]:
+        relative = item["path"]
+        raw = _checked_bytes(RAW / relative, item["git_blob_sha1"])
+        source = json.loads(raw)
+        document = source["document"]
+        advisory_id = str(document["tracking"]["id"])
+        title = _compact(str(document["title"]))
+        note_text = " ".join(str(note.get("text", "")) for note in document.get("notes", [])
+                             if note.get("category") in {"summary", "general"})
+        remedies = []
+        for vulnerability in source.get("vulnerabilities", []):
+            remedies.extend(str(remedy.get("details", ""))
+                            for remedy in vulnerability.get("remediations", [])
+                            if remedy.get("category") in {"vendor_fix", "workaround", "mitigation"})
+        body = (_compact(note_text)[:2000] + " Remediation: " + _compact(" ".join(remedies))[:3000]).strip()
+        if not body:
+            body = title
+        record = validate_record({
+            "record_id": f"advisory:{advisory_id}",
+            "publisher": "CISA CSAF OT",
+            "heading": f"{advisory_id} {title}",
+            "body": body,
+            "reference": f"https://github.com/cisagov/CSAF/blob/{manifest['commit']}/{relative}",
+            "kind": "advisory",
+        })
+        cves = sorted({str(vulnerability["cve"]) for vulnerability in source.get("vulnerabilities", [])
+                       if vulnerability.get("cve")})
+        entries.append({"record": record, "advisory_id": advisory_id, "title": title,
+                        "cves": cves})
+    ids = [entry["record"]["record_id"] for entry in entries]
+    if len(ids) != len(set(ids)):
+        raise ValueError("duplicate CSAF advisory ID")
+    return entries

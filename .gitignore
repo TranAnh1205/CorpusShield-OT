@@ -6,6 +6,9 @@ __pycache__/
 build/
 dist/
 .env
+data/raw/
 results/*.json
 !results/.gitkeep
 !results/kev-benchmark.json
+!results/full-benchmark.json
+!results/embedding-benchmark.json

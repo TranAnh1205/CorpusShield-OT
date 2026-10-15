@@ -1,5 +1,19 @@
 # Kiến trúc
 
+## Benchmark đa nguồn
+
+`csaf.py`, `mitre.py` và `kev.py` đọc ba bộ dữ liệu đã ghim rồi chuyển thành cùng bản ghi sáu trường. `full_benchmark.py` chọn 20 ca mỗi nhóm, tạo hai truy vấn/ca và 1 hoặc 5 tài liệu độc/ca. Cùng corpus đi qua cổng nạp HMAC, snapshot tùy điều kiện, rồi BM25, TF-IDF hoặc dense embedding. Chi tiết ma trận và số đo ở [benchmark đa nguồn](FULL_BENCHMARK.md).
+
+```text
+KEV / ATT&CK / CSAF → kiểm tra hash → 2.743 bản ghi sạch
+                                    ↓
+                        60 ca × 2 truy vấn
+                                    ↓
+                      60 hoặc 300 poison → HMAC → snapshot → retriever → top-k
+```
+
+Các phần dưới mô tả benchmark KEV nhỏ được giữ để chạy hoàn toàn offline sau khi clone.
+
 ## Thành phần và luồng dữ liệu
 
 `kev.py` đọc dữ liệu KEV đã ghim, kiểm tra SHA-256 và chuyển từng CVE thành bản ghi sáu trường. `benchmark.py` chọn 40 CVE bằng thứ tự hash ổn định, tạo hai truy vấn cho mỗi CVE và một tài liệu độc cho mỗi CVE. Mọi tài liệu độc được đưa vào cùng một corpus ở điều kiện có tấn công.
@@ -21,4 +35,4 @@ HMAC xác nhận bên ký có khóa; nó không chứng minh nội dung đúng. 
 
 ## Truy xuất
 
-`BM25` dùng `k1=1.2`, `b=0.75`, IDF không âm. `TFIDF` dùng tần số log, IDF làm trơn và cosine. Cả hai dùng tokenizer ASCII chữ/số, biến query thành các token thường và giữ thứ tự corpus khi đồng điểm. Đây là hai baseline từ vựng tự cài bằng thư viện chuẩn Python; không có embedding, reranker hay bước sinh câu trả lời.
+`BM25` dùng `k1=1.2`, `b=0.75`, IDF không âm. `TFIDF` dùng tần số log, IDF làm trơn và cosine. Cả hai dùng tokenizer ASCII chữ/số, biến query thành các token thường và giữ thứ tự corpus khi đồng điểm. `dense.py` dùng MiniLM-L6-v2 ở revision ghim, vector chuẩn hóa và cosine; embedding được cache theo hash nội dung để các điều kiện không encode lặp. Dự án chưa có reranker hay bước sinh câu trả lời.
