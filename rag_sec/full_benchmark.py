@@ -1,4 +1,4 @@
-"""Multi-source corpus poisoning evaluation, written independently for RAG-SEC."""
+"""Multi-source corpus poisoning evaluation for CorpusShield-OT."""
 
 from __future__ import annotations
 

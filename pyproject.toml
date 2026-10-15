@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rag-sec"
+name = "corpusshield-ot"
 version = "1.0.0"
-description = "Independent, reproducible corpus-poisoning lab for security retrieval"
+description = "Reproducible corpus-poisoning benchmark and provenance defense for security RAG"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
@@ -14,7 +14,7 @@ dependencies = []
 embedding = ["sentence-transformers>=5,<6", "torch==2.13.0"]
 
 [project.scripts]
-rag-sec = "rag_sec.cli:main"
+corpusshield-ot = "rag_sec.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["rag_sec*"]

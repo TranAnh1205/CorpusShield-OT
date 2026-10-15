@@ -20,7 +20,7 @@ from .trust import snapshot
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="rag-sec", description="Independent RAG poisoning lab")
+    parser = argparse.ArgumentParser(prog="corpusshield-ot", description="Security RAG poisoning benchmark")
     sub = parser.add_subparsers(dest="command", required=True)
     demo = sub.add_parser("demo", help="show the highest-ranked record for one fixture question")
     demo.add_argument("--case", type=int, default=1, choices=range(1, len(questions()) + 1))

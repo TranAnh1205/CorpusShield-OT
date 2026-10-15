@@ -54,7 +54,7 @@ def fetch_csaf(workers: int = 12) -> list[Path]:
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             url = f"https://raw.githubusercontent.com/cisagov/CSAF/{commit}/{relative}"
-            request = urllib.request.Request(url, headers={"User-Agent": "rag-sec-research"})
+            request = urllib.request.Request(url, headers={"User-Agent": "corpusshield-ot-research"})
             with urllib.request.urlopen(request, timeout=90) as response:
                 data = response.read()
             temporary = path.with_suffix(".download")
