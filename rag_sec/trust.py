@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
+import re
 from collections.abc import Iterable, Mapping
+from pathlib import Path
 
 from .records import canonical_bytes, validate_record
+from .io_utils import read_file
 
 
 def _key_bytes(key: bytes) -> bytes:
@@ -20,7 +24,7 @@ def sign(record: object, key: bytes) -> str:
 
 
 def verify(record: object, signature: object, key: bytes) -> bool:
-    if not isinstance(signature, str) or len(signature) != 64:
+    if not isinstance(signature, str) or re.fullmatch(r"[0-9a-f]{64}", signature) is None:
         return False
     try:
         return hmac.compare_digest(sign(record, key), signature)
@@ -42,6 +46,32 @@ def snapshot(records: Iterable[object]) -> dict[str, object]:
     return {"version": 1, "sha256_by_id": pins}
 
 
+def validate_snapshot(value: object) -> dict[str, object]:
+    """Copy the trust anchor before processing any caller-controlled iterator."""
+    if not isinstance(value, Mapping) or set(value) != {"version", "sha256_by_id"}:
+        raise ValueError("invalid snapshot")
+    pins = value["sha256_by_id"]
+    if type(value["version"]) is not int or value["version"] != 1 or not isinstance(pins, dict) or not pins:
+        raise ValueError("invalid snapshot")
+    detached = dict(pins)
+    for name, digest in detached.items():
+        if (not isinstance(name, str) or not name.strip() or len(name) > 512
+                or any(ord(c) < 32 or ord(c) == 127 for c in name)
+                or not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None):
+            raise ValueError("invalid snapshot entry")
+    return {"version": 1, "sha256_by_id": detached}
+
+
+def load_snapshot(path: Path, expected_sha256: str) -> dict[str, object]:
+    """Require a digest supplied through a separately trusted configuration."""
+    if not isinstance(expected_sha256, str) or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None:
+        raise ValueError("snapshot SHA-256 must be 64 lowercase hexadecimal characters")
+    raw = read_file(path, 16 * 1024 * 1024)
+    if not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), expected_sha256):
+        raise ValueError("approved snapshot SHA-256 mismatch")
+    return validate_snapshot(json.loads(raw))
+
+
 def ingest(
     envelopes: Iterable[object],
     key: bytes,
@@ -50,9 +80,7 @@ def ingest(
     """Accept detached records; return (accepted, rejected reasons)."""
     _key_bytes(key)
     if approved is not None:
-        pins = approved.get("sha256_by_id")
-        if approved.get("version") != 1 or not isinstance(pins, dict):
-            raise ValueError("invalid snapshot")
+        pins = validate_snapshot(approved)["sha256_by_id"]
     else:
         pins = None
     accepted: list[dict[str, str]] = []

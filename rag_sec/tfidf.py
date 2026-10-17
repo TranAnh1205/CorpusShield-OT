@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections import Counter
 
-from .records import validate_record
+from .records import validate_record, validate_search
 from .retrieval import tokenize
 
 
@@ -22,8 +22,7 @@ class TFIDF:
         self.norms = [math.sqrt(sum(value * value for value in row.values())) for row in self.vectors]
 
     def search(self, query: str, top_k: int = 5) -> list[tuple[dict[str, str], float]]:
-        if top_k < 1:
-            raise ValueError("top_k must be positive")
+        validate_search(query, top_k)
         counts = Counter(tokenize(query))
         qvec = {term: (1 + math.log(frequency)) * self.idf[term]
                 for term, frequency in counts.items() if term in self.idf}

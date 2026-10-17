@@ -13,15 +13,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.13'
       - name: Install uv
-        run: python -m pip install uv
+        run: python -m pip install uv==0.11.14
       - name: Install project
         run: uv sync --locked --python 3.13
       - name: Fetch pinned source data
         run: uv run --no-sync python -m rag_sec fetch-data
       - name: Run unit tests
         run: uv run --no-sync python -m unittest discover -s tests -v
+      - name: Audit application code
+        run: |
+          uvx --from bandit==1.9.4 bandit -r rag_sec
+          uvx --from ruff==0.17.1 ruff check --isolated --select E4,E7,E9,F rag_sec tests
+      - name: Audit locked dependencies including embedding extra
+        run: |
+          uv export --locked --all-extras --no-dev --no-emit-project --format requirements-txt --output-file "$RUNNER_TEMP/audit-requirements.txt" --quiet
+          uvx --from pip-audit==2.10.1 pip-audit --no-deps --disable-pip -r "$RUNNER_TEMP/audit-requirements.txt"
+      - name: Exercise persisted snapshot and query-blind benchmark
+        run: |
+          uv run --no-sync python -m rag_sec snapshot --source corpus --output "$RUNNER_TEMP/approved.json"
+          SNAPSHOT_SHA=$(sha256sum "$RUNNER_TEMP/approved.json" | cut -d ' ' -f1)
+          uv run --no-sync python -m rag_sec full-benchmark --backend both --cases-per-source 1 --attack-mode query-blind --approved-snapshot "$RUNNER_TEMP/approved.json" --snapshot-sha256 "$SNAPSHOT_SHA" --output "$RUNNER_TEMP/smoke.json"

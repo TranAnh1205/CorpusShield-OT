@@ -6,7 +6,7 @@ import math
 import re
 from collections import Counter
 
-from .records import validate_record
+from .records import validate_record, validate_search
 
 TOKEN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
@@ -19,6 +19,9 @@ class BM25:
     def __init__(self, records: list[dict[str, str]], k1: float = 1.2, b: float = 0.75):
         if not records:
             raise ValueError("retriever requires at least one record")
+        if (not isinstance(k1, (int, float)) or not isinstance(b, (int, float))
+                or not math.isfinite(k1) or k1 <= 0 or not math.isfinite(b) or not 0 <= b <= 1):
+            raise ValueError("BM25 requires finite k1 > 0 and 0 <= b <= 1")
         self.records = [validate_record(item) for item in records]
         self.k1, self.b = k1, b
         self.terms = [Counter(tokenize(r["heading"] + " " + r["body"])) for r in self.records]
@@ -27,9 +30,8 @@ class BM25:
         self.df = Counter(term for counts in self.terms for term in counts)
 
     def search(self, query: str, top_k: int = 5) -> list[tuple[dict[str, str], float]]:
-        if top_k < 1:
-            raise ValueError("top_k must be positive")
-        words = set(tokenize(query))
+        validate_search(query, top_k)
+        words = sorted(set(tokenize(query)))
         scored = []
         for position, (record, counts, length) in enumerate(
             zip(self.records, self.terms, self.lengths, strict=True)

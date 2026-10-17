@@ -92,7 +92,8 @@ def cluster_interval(rows: list[dict[str, object]], metric: str) -> list[float]:
     if not grouped or any(len(values) != 2 for values in grouped.values()):
         raise ValueError("expected two queries per target")
     means = [sum(values) / len(values) for values in grouped.values()]
-    rng = random.Random(f"{SEED}:{metric}:{','.join(sorted(grouped))}")
+    # Statistical resampling only; this generator never creates security keys.
+    rng = random.Random(f"{SEED}:{metric}:{','.join(sorted(grouped))}")  # nosec B311
     draws = sorted(sum(rng.choices(means, k=len(means))) / len(means) for _ in range(2000))
     return [round(draws[49], 4), round(draws[1949], 4)]
 

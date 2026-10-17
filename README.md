@@ -14,7 +14,7 @@ The experiment measures **retrieval exposure**, not whether an LLM follows a mal
 |---|---|
 | Corpus | 1,745 KEV records, 698 active ATT&CK techniques with mitigations, 300 CSAF OT advisories |
 | Cases | 60 fixed targets: 20 KEV, 10 Enterprise, 10 ICS, 20 CSAF; original and reworded query for each |
-| Attacks | Query-aware source spoofing; 1 or 5 injected records per case, with all cases attacked together |
+| Attacks | Query-aware and query-blind template source spoofing; 1 or 5 injected records per case, with all cases attacked together |
 | Retrievers | BM25, TF-IDF, and pinned `all-MiniLM-L6-v2` embeddings |
 | Trust conditions | Clean, unfiltered, forged HMAC, replayed HMAC, compromised signer, compromised signer with protected snapshot |
 | Reporting | Top-1/top-5 poison and target metrics, ranks, scores, per-source breakdowns, and case-cluster bootstrap intervals |
@@ -27,17 +27,17 @@ Python 3.11+ is required. The lexical benchmark has no third-party runtime depen
 
 ```bash
 python -m rag_sec fetch-data
-python -m rag_sec full-benchmark --backend both --output results/full-benchmark.json
+python -m rag_sec full-benchmark --backend both --output results/latest-benchmark.json
 python -m unittest discover -s tests -v
 ```
 
-The [CI workflow](.github/workflows/ci.yml) performs a fresh install, fetches the pinned source files, and runs the same unit suite on every push and pull request.
+The [CI workflow](.github/workflows/ci.yml) installs locked dependencies, fetches pinned source files, runs tests, audits code and dependencies, and exercises a persisted approval snapshot on main pushes and pull requests.
 
 For dense retrieval, install the optional dependencies and run the pinned model:
 
 ```bash
 uv sync --extra embedding
-uv run --extra embedding python -m rag_sec full-benchmark --backend embedding --output results/embedding-benchmark.json
+uv run --extra embedding python -m rag_sec full-benchmark --backend embedding --output results/embedding-latest.json
 ```
 
 The first dense run downloads model weights if they are not already cached. Use `--cases-per-source 2` for a short pipeline check, or `--backend all` to run all three retrievers together. `demo`, `evaluate`, and `benchmark` are smaller offline exercises; command details are in [the CLI reference](docs/REFERENCE.md).
@@ -80,7 +80,20 @@ The [data provenance notes](data/README.md) list upstream repositories, pinned c
 
 The HMAC key in benchmark runs is a **fixed simulation key** for reproducibility, not a production secret-management design. HMAC does not distinguish approved content from malicious content signed with a stolen key. The snapshot works only when created from a known-clean baseline and protected from the attacker. The benchmark does not measure generated-answer harm, first-ingestion poisoning, adaptive semantic attacks, reranking, or edge-device latency. See the [threat model](docs/SECURITY.md).
 
-An optional `answer-eval` command passes saved top-five contexts to an OpenAI-compatible chat endpoint. It requires an API key in `RAG_SEC_LLM_API_KEY`, limits the number of calls, and saves answers for manual review. Its exact-phrase score is a conservative proxy; no live LLM result is claimed here.
+An optional `answer-eval` command validates saved provenance and top-five contexts before passing them to an OpenAI-compatible chat endpoint. It requires an API key in `RAG_SEC_LLM_API_KEY`, limits calls, and samples across sources and query versions. Exact-phrase presence can include quotations and negations: it is not attack success. No live LLM result is claimed here.
+
+## Security review and reproducible approvals
+
+See the [security review](docs/SECURITY_REVIEW.md) for fixes, verification evidence, and remaining gaps. Downloads have size limits, pinned checksums, atomic writes, and no redirects. API endpoints require HTTPS except explicit loopback HTTP. Existing result files require `--overwrite`; snapshots require a new path.
+
+Create an approval from reviewed source data, keep its printed SHA-256 in separately controlled configuration, then use both inputs:
+
+```bash
+python -m rag_sec snapshot --source corpus --output results/approved-corpus.json
+python -m rag_sec full-benchmark --backend both --attack-mode query-blind --approved-snapshot results/approved-corpus.json --snapshot-sha256 <TRUSTED_SHA256> --output results/query-blind-latest.json
+```
+
+The command exports hashes; it does not perform human approval or establish filesystem permissions. Without these flags the benchmark uses an explicitly labelled simulated in-process snapshot. Schema 2 results include code hashes, Git state, corpus/case hashes, environment, and indexing/query timings. Run from a source checkout: standalone wheel deployment with bundled data is not supported yet.
 
 ## Roadmap
 

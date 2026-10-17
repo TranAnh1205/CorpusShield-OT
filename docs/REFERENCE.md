@@ -6,9 +6,9 @@ Chạy từ thư mục gốc với Python 3.11+:
 
 ```powershell
 python -m rag_sec fetch-data
-python -m rag_sec full-benchmark --backend both --output results/full-benchmark.json
-uv run --extra embedding python -m rag_sec full-benchmark --backend embedding --output results/embedding-benchmark.json
-python -m rag_sec benchmark --backend both --output results/kev-benchmark.json
+python -m rag_sec full-benchmark --backend both --output results/latest-benchmark.json
+uv run --extra embedding python -m rag_sec full-benchmark --backend embedding --output results/embedding-latest.json
+python -m rag_sec benchmark --backend both --output results/kev-latest.json
 python -m rag_sec benchmark --backend bm25
 python -m rag_sec benchmark --backend tfidf
 python -m rag_sec demo --case 4
@@ -17,11 +17,15 @@ python -m rag_sec snapshot --output results/approved-fixture.json
 python -m unittest discover -s tests -v
 ```
 
-`benchmark` dùng bản CISA KEV nằm trong `data/`; mặc định chạy cả BM25 và TF-IDF. Kết quả JSON có `summary` theo retriever/điều kiện, bốn chỉ số với count/rate/bootstrap 95%, và `per_query` chứa top-5 ID. Khóa mô phỏng và nội dung tài liệu độc không được ghi vào kết quả. `demo`, `evaluate`, `snapshot` chỉ sử dụng tám fixture IoT tự viết, không dùng KEV.
+`benchmark` dùng bản CISA KEV nằm trong `data/`; mặc định chạy cả BM25 và TF-IDF. Kết quả JSON có `summary` và `per_query`. `demo`, `evaluate` dùng tám fixture IoT tự viết; `snapshot` mặc định dùng fixture nhưng hỗ trợ `--source corpus` để xuất snapshot toàn bộ dữ liệu đã xác minh.
 
 `fetch-data` là lệnh duy nhất cần tải ATT&CK và CSAF; các tệp gốc được lưu ngoài Git. `full-benchmark` dùng dữ liệu đã tải, có `--cases-per-source` và ba backend `bm25`, `tfidf`, `embedding` (`both` hoặc `all`). Tệp kết quả đa nguồn có thể lưu vào Git vì chỉ ghi ID, điểm truy xuất và metadata, không ghi nội dung advisory. Xem [benchmark đa nguồn](FULL_BENCHMARK.md).
 
-`answer-eval` nhận `--input`, `--backend`, `--condition`, `--poisons-per-case`, `--max-queries`, `--model` và `--base-url`. Nó gửi top-5 văn bản tới endpoint chat tương thích OpenAI bằng khóa trong `RAG_SEC_LLM_API_KEY`. Chỉ số cụm từ chính xác có thể bỏ sót câu trả lời sai được diễn đạt lại; cần đọc từng câu trả lời. Tệp đầu ra mặc định `results/answer-eval.json` được bỏ qua bởi Git.
+`answer-eval` nhận `--input`, `--backend`, `--condition`, `--poisons-per-case`, `--max-queries`, `--model` và `--base-url`. Nó kiểm tra nguồn, ca đánh giá và ID của toàn bộ hàng được chọn trước khi gửi top-5 văn bản tới endpoint bằng khóa trong `RAG_SEC_LLM_API_KEY`. Mẫu được phân bổ theo nguồn và phiên bản truy vấn. Cụm từ khớp có thể nằm trong câu phủ định; không dùng nó làm tỷ lệ tấn công thành công. Endpoint bắt buộc HTTPS, ngoại trừ HTTP loopback được chỉ định; redirect bị chặn. Tệp đầu ra mặc định `results/answer-eval.json` được bỏ qua bởi Git.
+
+`full-benchmark --attack-mode query-blind` tạo payload từ tiêu đề mục tiêu công khai, không dùng truy vấn gốc hay diễn đạt lại. Mặc định vẫn là `query-aware`. `--approved-snapshot PATH` phải đi cùng `--snapshot-sha256 HASH` lấy từ cấu hình tin cậy riêng. Snapshot phải khớp baseline hiện tại; thay đổi hợp lệ cần duyệt lại. Khi không truyền, snapshot là mô phỏng trong tiến trình.
+
+Các lệnh ghi kết quả từ chối đường dẫn đã tồn tại trừ khi có `--overwrite`. Lệnh `snapshot` không cho ghi đè. Ghi tệp dùng thay thế nguyên tử; đây không phải cơ chế khóa giữa nhiều tiến trình. Schema 2 bổ sung trường `run`, `snapshot`, `attack_mode`, và thông tin thời gian chạy. Chạy từ source checkout; wheel chưa đóng gói dữ liệu.
 
 ## API chính
 

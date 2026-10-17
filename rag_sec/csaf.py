@@ -9,33 +9,46 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .records import validate_record
+from .io_utils import atomic_write, read_file
+from .network import download
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "data" / "csaf-manifest.json"
 RAW = ROOT / "data" / "raw" / "csaf"
+MANIFEST_SHA256 = "a80f112a5def02e2481c452b15a0fa83f1245e33bd35b8b096f350cbbb7c5792"
+MAX_ADVISORY_BYTES = 16 * 1024 * 1024
 
 
 def _manifest() -> dict[str, object]:
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    # Git checkouts can convert line endings on Windows; pin canonical LF bytes.
+    raw = read_file(MANIFEST, 1024 * 1024).replace(b"\r\n", b"\n")
+    if hashlib.sha256(raw).hexdigest() != MANIFEST_SHA256:
+        raise ValueError("CSAF manifest SHA-256 mismatch")
+    manifest = json.loads(raw)
     if manifest.get("source") != "cisagov/CSAF" or len(manifest.get("files", [])) != 300:
         raise ValueError("invalid CSAF manifest")
+    if not re.fullmatch(r"[0-9a-f]{40}", manifest.get("commit", "")):
+        raise ValueError("invalid CSAF commit")
+    seen = set()
     for item in manifest["files"]:
         path = item["path"]
         if not re.fullmatch(r"csaf_files/OT/white/20(?:23|24|25|26)/[a-z0-9-]+\.json", path):
             raise ValueError("invalid CSAF path in manifest")
         if not re.fullmatch(r"[0-9a-f]{40}", item["git_blob_sha1"]):
             raise ValueError("invalid Git blob digest in manifest")
+        if path in seen:
+            raise ValueError("duplicate CSAF path")
+        seen.add(path)
     return manifest
 
 
 def _checked_bytes(path: Path, blob_sha: str) -> bytes:
-    data = path.read_bytes()
-    actual = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
+    data = read_file(path, MAX_ADVISORY_BYTES)
+    actual = hashlib.sha1(f"blob {len(data)}\0".encode() + data, usedforsecurity=False).hexdigest()
     if actual != blob_sha:
         raise ValueError(f"Git blob hash mismatch: {path}")
     return data
@@ -43,7 +56,7 @@ def _checked_bytes(path: Path, blob_sha: str) -> bytes:
 
 def fetch_csaf(workers: int = 12) -> list[Path]:
     """Fetch the 300 selected files from one commit, verifying each Git blob."""
-    if workers < 1 or workers > 32:
+    if type(workers) is not int or workers < 1 or workers > 32:
         raise ValueError("workers must be between 1 and 32")
     manifest = _manifest()
     commit = manifest["commit"]
@@ -51,16 +64,16 @@ def fetch_csaf(workers: int = 12) -> list[Path]:
     def fetch_one(item: dict[str, str]) -> Path:
         relative = item["path"]
         path = RAW / relative
+        if not path.resolve().is_relative_to(RAW.resolve()):
+            raise ValueError("CSAF destination escapes data directory")
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             url = f"https://raw.githubusercontent.com/cisagov/CSAF/{commit}/{relative}"
-            request = urllib.request.Request(url, headers={"User-Agent": "corpusshield-ot-research"})
-            with urllib.request.urlopen(request, timeout=90) as response:
-                data = response.read()
-            temporary = path.with_suffix(".download")
-            temporary.write_bytes(data)
-            _checked_bytes(temporary, item["git_blob_sha1"])
-            temporary.replace(path)
+            data = download(url, limit=MAX_ADVISORY_BYTES)
+            actual = hashlib.sha1(f"blob {len(data)}\0".encode() + data, usedforsecurity=False).hexdigest()
+            if actual != item["git_blob_sha1"]:
+                raise ValueError("downloaded CSAF Git blob hash mismatch")
+            atomic_write(path, data)
         _checked_bytes(path, item["git_blob_sha1"])
         return path
 

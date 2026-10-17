@@ -2,6 +2,7 @@ import unittest
 
 from rag_sec.full_benchmark import attack_records, condition_corpora, load_inputs, run_full
 from rag_sec.mitre import load_mitre
+from rag_sec.trust import snapshot
 
 
 class FullBenchmarkTests(unittest.TestCase):
@@ -42,7 +43,12 @@ class FullBenchmarkTests(unittest.TestCase):
         self.assertEqual(sum(case["target_id"].startswith("attack:ics:") for case in attack), 10)
 
     def test_small_run_reports_every_condition_and_query(self):
-        result = run_full(("bm25",), 1)
+        result = run_full(("bm25",), 1, attack_mode="query-blind", approved_snapshot=snapshot(self.records))
+        self.assertEqual(result["schema_version"], 2)
+        self.assertEqual(result["snapshot"]["mode"], "provided")
+        self.assertEqual(result["attack_mode"], "query-blind")
+        self.assertEqual(len(result["run"]["source_tree_sha256"]), 64)
+        self.assertEqual(len(result["performance"]["scenarios"]), 11)
         self.assertEqual(len(result["per_query"]), 3 * 2 * 11)
         self.assertEqual({row["condition"] for row in result["per_query"]},
                          {"clean", "unfiltered", "signature_forged", "signature_replayed",

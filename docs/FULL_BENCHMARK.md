@@ -34,9 +34,9 @@ Mỗi retriever có 11 cấu hình: 1 baseline, 5 điều kiện với 1 poison/
 
 ```powershell
 python -m rag_sec fetch-data
-python -m rag_sec full-benchmark --backend both --output results/full-benchmark.json
+python -m rag_sec full-benchmark --backend both --output results/latest-benchmark.json
 uv sync --extra embedding
-uv run --extra embedding python -m rag_sec full-benchmark --backend embedding --output results/embedding-benchmark.json
+uv run --extra embedding python -m rag_sec full-benchmark --backend embedding --output results/embedding-latest.json
 ```
 
 ## Kết quả đã chạy

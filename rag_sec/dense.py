@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from .records import canonical_bytes, validate_record
+from .records import canonical_bytes, validate_record, validate_search
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 MODEL_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
@@ -21,6 +21,8 @@ class DenseStore:
         self.queries = {}
 
     def prepare(self, records: list[dict[str, str]], queries: list[str]) -> None:
+        for query in queries:
+            validate_search(query, 1)
         texts = {}
         for record in records:
             item = validate_record(record)
@@ -57,8 +59,7 @@ class DenseIndex:
     def search(self, query: str, top_k: int = 5) -> list[tuple[dict[str, str], float]]:
         import numpy as np
 
-        if top_k < 1:
-            raise ValueError("top_k must be positive")
+        validate_search(query, top_k)
         vector = self.store.queries.get(query)
         if vector is None:
             self.store.prepare([], [query])

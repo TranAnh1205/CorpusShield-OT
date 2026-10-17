@@ -1,0 +1,4 @@
+# Preserve the byte-pinned catalog when checking out on Windows.
+data/known_exploited_vulnerabilities.json -text
+# The manifest verifier also normalizes CRLF for existing checkouts.
+data/csaf-manifest.json text eol=lf
